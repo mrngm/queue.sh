@@ -11,12 +11,15 @@ PASS=""
 
 VERBOSE=0
 ### Clean cookiejar
-rm ./koekjes
+COOKIEFILE="$HOME/.cache/queue.sh/cookies.txt"
+
+mkdir -p $(dirname $COOKIEFILE)
+rm -f "${COOKIEFILE}"
 
 ### Store some cookies and get the CSRFM token
-CSRFM=`curl -sS -b ./koekjes -c ./koekjes -H "Referer: ${REFERER}" "${LOGINURL}" | grep 'csrfmiddlewaretoken' | sed -e "s/^.*value='\(.*\)'.*$/\1/"`
+CSRFM=$(curl -sS -b ${COOKIEFILE} -c ${COOKIEFILE} -H "Referer: ${REFERER}" "${LOGINURL}" | grep 'csrfmiddlewaretoken' | sed -e "s/^.*value='\(.*\)'.*$/\1/")
 
-curl -sS -b ./koekjes -c ./koekjes -d "username=${USER}" -d "password=${PASS}" -d "csrfmiddlewaretoken=${CSRFM}" -H "Referer: ${REFERER}" "${LOGINURL}"
+curl -sS -b "${COOKIEFILE}" -c "${COOKIEFILE}" -d "username=${USER}" -d "password=${PASS}" -d "csrfmiddlewaretoken=${CSRFM}" -H "Referer: ${REFERER}" "${LOGINURL}"
 
 trap exit SIGINT
 clear
@@ -47,25 +50,26 @@ function format_seconds {
 	echo "${OUT}"
 }
 
+INPUTBUFFER=""
 while true; do
-	Q=`curl -sS -b ./koekjes -c ./koekjes -H "Referer: ${REFERER}" "${QUEUEURL}"`
-	NOW=`echo ${Q} | jq -r '.current_time'`
-	START=`echo ${Q} | jq -r '.started_at'`
-	DURATION=`echo ${Q} | jq -r '.current_song.song.duration'`
+	Q=$(curl -sS -b ${COOKIEFILE} -c ${COOKIEFILE} -H "Referer: ${REFERER}" "${QUEUEURL}")
+	NOW=$(echo ${Q} | jq -r '.current_time')
+	START=$(echo ${Q} | jq -r '.started_at')
+	DURATION=$(echo ${Q} | jq -r '.current_song.song.duration')
 	TIMELEFT="$(( ${DURATION} - (${NOW} - ${START}) ))"
-	CURRREQ=`echo ${Q} | jq -r '.current_song | .requested_by'`
-	CURRART=`echo ${Q} | jq -r '.current_song | .song.artist'`
-	CURRTIT=`echo ${Q} | jq -r '.current_song | .song.title'`
+	CURRREQ=$(echo ${Q} | jq -r '.current_song | .requested_by')
+	CURRART=$(echo ${Q} | jq -r '.current_song | .song.artist')
+	CURRTIT=$(echo ${Q} | jq -r '.current_song | .song.title')
 	TL=$(format_seconds ${TIMELEFT})
 	PREV=${TIMELEFT}
 	QLIST=""
 	UNTIL=${PREV}
 	LINESUSED=3
 	while read item; do
-		REQ=`echo ${item} | cut -d '%' -f 1`
-		ART=`echo ${item} | cut -d '%' -f 2`
-		TIT=`echo ${item} | cut -d '%' -f 3`
-		DUR=`echo ${item} | cut -d '%' -f 4`
+		REQ=$(echo ${item} | cut -d '%' -f 1)
+		ART=$(echo ${item} | cut -d '%' -f 2)
+		TIT=$(echo ${item} | cut -d '%' -f 3)
+		DUR=$(echo ${item} | cut -d '%' -f 4)
 		UNTILTL=$(format_seconds ${UNTIL})
 		QLIST="${QLIST}\n${REQ}%${ART}%${TIT}%${UNTILTL}"
 		PREV=${UNTIL}
@@ -82,4 +86,18 @@ while true; do
 		HDR="Requested by%Artist%Title%Time left\n\n"
 	fi
 	echo -e "${HDR}${CURRREQ}%${CURRART}%${CURRTIT}%Playing now!\n${QLIST}" | column -s '%'  -t -e -c $(tput cols)
+
+	IFS=""
+	read -r -s -n 1 -t 0.00001 TMP
+	while [[ "${TMP}x" != "x" ]]; do
+		if [[ "${TMP}" == $'\x15' ]]; then
+			INPUTBUFFER=""
+		else
+			INPUTBUFFER="${INPUTBUFFER}${TMP}"
+		fi
+		read -r -s -n 1 -t 0.00001 TMP
+	done
+
+	echo ${INPUTBUFFER}
+	echo
 done
