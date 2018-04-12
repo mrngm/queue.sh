@@ -6,8 +6,22 @@ QUEUEURL="https://marietje-zuid.science.ru.nl/api/queue"
 REFERER="https://marietje-zuid.science.ru.nl/"
 
 ### LOGIN
-USER=""
-PASS=""
+USERFILE="credentials.user"
+PASSFILE="credentials.pass"
+
+if [ ! -f "${USERFILE}" ]; then
+	touch "${USERFILE}"
+	read -erp "Username: " USER
+	echo -n ${USER} > ${USERFILE}
+	echo "... saved!"
+fi
+if [ ! -f "${PASSFILE}" ]; then
+	touch "${PASSFILE}"
+	chmod 600 "${PASSFILE}"
+	read -ersp "Password: " PASS
+	echo -n ${PASS} > ${PASSFILE}
+	echo "... saved!"
+fi
 
 VERBOSE=0
 ### Clean cookiejar
@@ -16,7 +30,8 @@ rm ./koekjes
 ### Store some cookies and get the CSRFM token
 CSRFM=`curl -sS -b ./koekjes -c ./koekjes -H "Referer: ${REFERER}" "${LOGINURL}" | grep 'csrfmiddlewaretoken' | sed -e "s/^.*value='\(.*\)'.*$/\1/"`
 
-curl -sS -b ./koekjes -c ./koekjes -d "username=${USER}" -d "password=${PASS}" -d "csrfmiddlewaretoken=${CSRFM}" -H "Referer: ${REFERER}" "${LOGINURL}"
+curl -sS -b ./koekjes -c ./koekjes -d "username=$(cat ${USERFILE})" -d "password=$(cat ${PASSFILE})" -d "csrfmiddlewaretoken=${CSRFM}" -H "Referer: ${REFERER}" "${LOGINURL}"
+
 
 trap exit SIGINT
 clear
